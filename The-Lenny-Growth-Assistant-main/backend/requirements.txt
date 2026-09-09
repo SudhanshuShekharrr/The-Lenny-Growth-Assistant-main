@@ -1,0 +1,14 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+asyncpg==0.29.0
+python-dotenv==1.0.1
+httpx==0.27.2
+PyYAML==6.0.2
+anthropic==0.34.0
+
+# Added in later steps (agent layer, RAG, cloud LLM) — listed now so the
+# requirements shape is stable; uncomment as each step is built:
+# anthropic==0.34.0
+# pgvector==0.3.4

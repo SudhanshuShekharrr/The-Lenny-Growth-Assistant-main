@@ -1,0 +1,87 @@
+name: lenny-growth-assistant
+
+services:
+  postgres:
+    # pgvector/pgvector ships Postgres with the pgvector extension preinstalled,
+    # which the RAG retrieval step will need for transcript-chunk embeddings.
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lenny}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lenny}
+      POSTGRES_DB: ${POSTGRES_DB:-lenny_growth_assistant}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lenny} -d ${POSTGRES_DB:-lenny_growth_assistant}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    # GPU acceleration (optional): uncomment on a machine with an NVIDIA GPU
+    # and the NVIDIA Container Toolkit installed.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override host-oriented defaults from .env with in-network service names.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lenny}:${POSTGRES_PASSWORD:-lenny}@postgres:5432/${POSTGRES_DB:-lenny_growth_assistant}
+      OLLAMA_BASE_URL: http://ollama:11434
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db:/app/db:ro
+      - ./backend/tests:/app/tests:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+volumes:
+  postgres_data:
+  ollama_data:
